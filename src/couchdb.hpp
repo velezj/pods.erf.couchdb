@@ -3,9 +3,7 @@
 #define __ERF_COUCHDB_couchdb_HPP__
 
 
-#include <boost/network/uri.hpp>
 #include "erf-couchdb/exceptions.hpp"
-
 
 namespace erf {
   namespace couchdb {

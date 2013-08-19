@@ -6,6 +6,7 @@
 
 #include <boost/network/uri.hpp>
 #include <boost/exception/all.hpp>
+#include <boost/property_tree/ptree.hpp>
 
 namespace erf {
   namespace couchdb {
