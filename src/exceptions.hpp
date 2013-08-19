@@ -8,7 +8,6 @@
 #include <boost/exception/all.hpp>
 #include <boost/property_tree/ptree.hpp>
 
-namespace erf {
   namespace couchdb {
 
 
@@ -31,7 +30,7 @@ namespace erf {
 
     // Description:
     // A general exception base class for couchdb exceptions.
-    class couchdb_exception : virtual boost::exception, virtual std::exception { }; 
+    class couchdb_exception : virtual boost::exception, virtual std::exception
     {
     };
 
@@ -56,4 +55,7 @@ namespace erf {
     
 
   }
-}
+
+#endif
+
+

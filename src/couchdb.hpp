@@ -5,7 +5,6 @@
 
 #include "erf-couchdb/exceptions.hpp"
 
-namespace erf {
   namespace couchdb {
 
 
@@ -35,7 +34,9 @@ namespace erf {
       //
       // Will also throw an exception if the response from couchdb
       // is an error response.
-      boost::property_tree::ptree save( const boost::property_tree::ptree& doc );
+      boost::property_tree::ptree 
+      save( const boost::property_tree::ptree& doc,
+	    const boost::optional<std::string>& id = boost::optional<std::string>() );
 
       // Description:
       // Fetch a particularly named document form thie couchdb.
@@ -51,6 +52,11 @@ namespace erf {
       
     protected:
 
+      // Description:
+      // The URI pointintg to the couchdb databse
+      boost::network::uri::uri _couchdb_database_uri;
+
+
     private:
 
     };
@@ -60,7 +66,6 @@ namespace erf {
 
 
   }
-}
 
 
 #endif
