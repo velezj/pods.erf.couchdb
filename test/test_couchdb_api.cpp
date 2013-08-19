@@ -29,6 +29,19 @@ int main( int argn, char** argv )
   std::cout << "FETCH doc: " << std::endl;
   json_parser::write_json( std::cout, fetched_doc );
   std::cout << std::endl;
+
+  // save another document with a generated uuid
+  doc.put( "0.1.2.3.4", "hahahahah!" );
+  save_response = couch.save( doc );
+  std::cout << "SAVE response: " << std::endl;
+  json_parser::write_json( std::cout, save_response );
+  std::cout << std::endl;
+  
+  // retrieve the document
+  fetched_doc = couch.fetch( uri::uri(save_response.get<std::string>("id")) );
+  std::cout << "FETCH doc: " << std::endl;
+  json_parser::write_json( std::cout, fetched_doc );
+  std::cout << std::endl;
   
 
   return 0;
