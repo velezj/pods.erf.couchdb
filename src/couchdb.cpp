@@ -35,7 +35,7 @@ namespace couchdb {
     //========================================================================
 
     ptree Couchdb::save( const ptree& doc,
-			 const optional<std::string>& id )
+			 const optional<std::string>& id ) const
     {
 
       // create an http client to eventually POST to the couchdb uri
@@ -111,7 +111,7 @@ namespace couchdb {
 
     //========================================================================
 
-    ptree Couchdb::fetch( const uri::uri& doc_id ) 
+    ptree Couchdb::fetch( const uri::uri& doc_id ) const
     {
 
       // create an http client to eventually POST to the couchdb uri
@@ -132,6 +132,64 @@ namespace couchdb {
     }
 
     //========================================================================
+
+  ptree 
+  Couchdb::try_update( const uri::uri& doc_id,
+		       const std::vector<std::pair<std::string,std::string> >& puts,
+		       const size_t num_retries ) const
+  {
+    
+    for( size_t i = 0; i < num_retries; ++i ) {
+
+      try {
+      
+	// fetch the document from couchdb
+	ptree doc;
+	try {
+	  doc = this->fetch( doc_id );
+	} catch ( couchdb_response_exception& e ) {
+	  // eat up this exceptio nand just try again
+	  continue;
+	}
+	
+	// ok, now apply the puts wanted
+	for( size_t put_i = 0; put_i < puts.size(); ++put_i ) {
+	  doc.put( puts[put_i].first, 
+		   puts[put_i].second );
+	}
+	
+	// try to save the document
+	ptree response;
+	try {
+	  response = this->save( doc, doc_id.string() );
+	} catch ( couchdb_response_exception& e ) {
+	  // ignore this exception and just try again
+	  continue;
+	}
+
+	// if we got here, we successfully update so return
+	// successful response
+	return response;
+
+      } catch ( boost::exception& e ) {
+      
+	// ok, we got a non-response related exception,
+	// so add information we know of and re-throw since
+	// we were not expecting this
+	e << couchdb_request_uri_error_info( doc_id )
+	  << couchdb_num_retries_error_info( i );
+	throw;
+      }
+      
+    }
+    
+    // num retries exhausted, throw exception
+    throw couchdb_exhausted_retries_exception()
+      << couchdb_request_uri_error_info( doc_id )
+      << couchdb_num_retries_error_info( num_retries );
+  }
+      
+
     //========================================================================
     //========================================================================
     //========================================================================

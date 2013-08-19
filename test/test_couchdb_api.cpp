@@ -42,6 +42,16 @@ int main( int argn, char** argv )
   std::cout << "FETCH doc: " << std::endl;
   json_parser::write_json( std::cout, fetched_doc );
   std::cout << std::endl;
+
+
+  // try to update the first document by adding some stuff
+  std::vector< std::pair<std::string,std::string> > updates;
+  updates.push_back( std::pair<std::string,std::string>( "x.z", "bwahahaha!" ) );
+  ptree update_response;
+  update_response = couch.try_update( uri::uri("test_doc_0001"), updates );
+  std::cout << "UPDATE response: " << std::endl;
+  json_parser::write_json( std::cout, update_response );
+  std::cout << std::endl;
   
 
   return 0;

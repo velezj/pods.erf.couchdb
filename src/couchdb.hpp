@@ -36,7 +36,7 @@
       // is an error response.
       boost::property_tree::ptree 
       save( const boost::property_tree::ptree& doc,
-	    const boost::optional<std::string>& id = boost::optional<std::string>() );
+	    const boost::optional<std::string>& id = boost::optional<std::string>() ) const;
 
       // Description:
       // Fetch a particularly named document form thie couchdb.
@@ -46,8 +46,20 @@
       //
       // Will throw an exception of network/communication issues
       // or if the document is not found.
-      boost::property_tree::ptree fetch( const boost::network::uri::uri& doc_id );
-      
+      boost::property_tree::ptree fetch( const boost::network::uri::uri& doc_id ) const;
+
+
+      // Description:
+      // Try to update a given document with the given list of
+      // additions (as per argumetns to ptree.put).
+      // This will try for a number of givne retries (default ot 10)
+      // before failing
+      //
+      // Returns the response from the successfull update
+      boost::property_tree::ptree 
+      try_update( const boost::network::uri::uri& doc_id,
+		  const std::vector<std::pair<std::string,std::string> >& puts,
+		  const size_t num_retries = 10 ) const;
       
       
     protected:
