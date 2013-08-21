@@ -16,10 +16,12 @@ endif (USE_PEDANTIC)
 
 add_library( erf-couchdb SHARED
   src/couchdb.cpp
+  src/utils.cpp
   )
 pods_install_headers( 
   src/exceptions.hpp
   src/couchdb.hpp
+  src/utils.hpp
   DESTINATION
   erf-couchdb
 )
