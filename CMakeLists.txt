@@ -15,6 +15,7 @@ endif (USE_PEDANTIC)
 
 
 add_library( erf-couchdb SHARED
+  src/exceptions.cpp
   src/couchdb.cpp
   src/utils.cpp
   )
