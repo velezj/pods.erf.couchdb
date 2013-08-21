@@ -1,12 +1,15 @@
 
 #include "couchdb.hpp"
+#include "utils.hpp"
 #include <boost/network/uri.hpp>
+#include <boost/network/uri/uri_io.hpp>
 #include <boost/network/protocol/http.hpp>
 #include <boost/network/protocol/http/client.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/property_tree/json_parser.hpp>
+
 #include <iostream>
 #include <sstream>
 
@@ -92,17 +95,14 @@ namespace couchdb {
 
       // Ok, check if the response is an error response, and if
       // it is throw an exception
-      if( response_ptree.get( "error", "" ).size() > 0 ) {
-	if( response_ptree.get<std::string>( "error" ) == "conflict" ) {
-	  throw couchdb_conflict_exception()
+      if( this->is_response_exception( response_ptree ) ) {
+	try {
+	  this->throw_exception_from_response( response_ptree );
+	} catch ( boost::exception& e ) {
+	  e
 	    << couchdb_request_uri_error_info( post_uri )
-	    << couchdb_raw_response_error_info( body(response) )
-	    << couchdb_response_error_info( response_ptree );
-	} else {
-	  throw couchdb_response_exception() 
-	    << couchdb_request_uri_error_info( post_uri )
-	    << couchdb_raw_response_error_info( body(response) )
-	    << couchdb_response_error_info( response_ptree );
+	    << couchdb_raw_response_error_info( body(response) );
+	  throw;
 	}
       }
       
@@ -127,7 +127,19 @@ namespace couchdb {
       ptree response_ptree;
       std::istringstream iss( body(response) );
       json_parser::read_json( iss, response_ptree );
-      
+
+      // throw exception if reponse is an error
+      if( this->is_response_exception( response_ptree ) ) {
+	try {
+	  this->throw_exception_from_response( response_ptree );
+	} catch ( boost::exception& e ) {
+	  e
+	    << couchdb_request_uri_error_info( get_uri )
+	    << couchdb_raw_response_error_info( body(response) );
+	  throw;
+	}
+      }
+
       return response_ptree;
     }
 
@@ -184,15 +196,90 @@ namespace couchdb {
     }
     
     // num retries exhausted, throw exception
-    throw couchdb_exhausted_retries_exception()
-      << couchdb_request_uri_error_info( doc_id )
-      << couchdb_num_retries_error_info( num_retries );
+    BOOST_THROW_EXCEPTION( couchdb_exhausted_retries_exception()
+			   << couchdb_request_uri_error_info( doc_id )
+			   << couchdb_num_retries_error_info( num_retries ) );
   }
       
 
     //========================================================================
+  
+  ptree
+  Couchdb::try_ensure_substructure( const uri::uri& doc_id,
+				    const ptree& structure,
+				    const size_t num_retries) const
+  {
+
+    for( size_t i = 0; i < num_retries; ++i ) {
+      
+      try {
+	
+	// fetch the document from couchdb
+	ptree doc;
+	try {
+	  doc = this->fetch( doc_id );
+	} catch ( couchdb_response_exception& e ) {
+	  // eat up this exceptio nand just try again
+	  continue;
+	}
+	
+	// ok, now ensure the given structure
+	ensure_substructure( doc, structure );
+	
+	// try to save the document
+	ptree response;
+	try {
+	  response = this->save( doc, doc_id.string() );
+	} catch ( couchdb_response_exception& e ) {
+	  // ignore this exception and just try again
+	  continue;
+	}
+
+	// if we got here, we successfully update so return
+	// successful response
+	return response;
+
+      } catch ( boost::exception& e ) {
+      
+	// ok, we got a non-response related exception,
+	// so add information we know of and re-throw since
+	// we were not expecting this
+	e << couchdb_request_uri_error_info( doc_id )
+	  << couchdb_num_retries_error_info( i );
+	throw;
+      }
+      
+    }
+    
+    // num retries exhausted, throw exception
+    BOOST_THROW_EXCEPTION( couchdb_exhausted_retries_exception()
+			   << couchdb_request_uri_error_info( doc_id )
+			   << couchdb_num_retries_error_info( num_retries ) );
+    
+  }
+  
     //========================================================================
+
+  bool Couchdb::is_response_exception( const ptree& response ) const
+  {
+    return ( response.get( "error", "" ).size() > 0 );
+  }
+
     //========================================================================
+
+  void 
+  Couchdb::throw_exception_from_response( const ptree& response ) const
+  {
+    if( response.get<std::string>( "error" ) == "conflict" ) {
+      BOOST_THROW_EXCEPTION( couchdb_conflict_exception()
+			     << couchdb_response_error_info( response ) );
+    } else {
+      BOOST_THROW_EXCEPTION( couchdb_response_exception()
+			     << couchdb_response_error_info( response ) );
+    }
+    
+  }
+
     //========================================================================
     //========================================================================
     //========================================================================

@@ -61,6 +61,18 @@
 		  const std::vector<std::pair<std::string,std::string> >& puts,
 		  const size_t num_retries = 10 ) const;
       
+
+      // Description:
+      // Try to ensure the given document (by id ) constians the given 
+      // substructure.
+      // This will try for a number of retries (default of 10) before
+      // failing
+      //
+      // Returns the response from hte successful update
+      boost::property_tree::ptree
+      try_ensure_substructure( const boost::network::uri::uri& doc_id,
+			       const boost::property_tree::ptree& structure,
+			       const size_t num_retries = 10 ) const;
       
     protected:
 
@@ -68,6 +80,15 @@
       // The URI pointintg to the couchdb databse
       boost::network::uri::uri _couchdb_database_uri;
 
+
+      // Description:
+      // Builds up an exception from a couchdb response and throws it
+      void throw_exception_from_response( const boost::property_tree::ptree& response ) const;
+
+      // Description:
+      // Returns true iff the given response should be translated to
+      // and exception
+      bool is_response_exception( const boost::property_tree::ptree& response ) const;
 
     private:
 
