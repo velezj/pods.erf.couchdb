@@ -68,6 +68,8 @@
       // This will try for a number of retries (default of 10) before
       // failing
       //
+      // This will create the document if it does not exist
+      //
       // Returns the response from hte successful update
       boost::property_tree::ptree
       try_ensure_substructure( const boost::network::uri::uri& doc_id,

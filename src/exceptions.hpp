@@ -66,6 +66,13 @@
 
     //-----------------------------------------------------------------------
 
+    // Description:
+    // A couchdb exception from trying to fetch a non-existing doc
+    struct couchdb_document_does_not_exist_exception : public couchdb_response_exception
+    {
+    };
+
+
     //-----------------------------------------------------------------------
 
     

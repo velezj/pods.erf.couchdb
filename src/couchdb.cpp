@@ -218,6 +218,9 @@ namespace couchdb {
 	ptree doc;
 	try {
 	  doc = this->fetch( doc_id );
+	} catch ( couchdb_document_does_not_exist_exception& de ) {
+	  // this is ok, we'll just assume empty document
+	  //std::cout << "ignoring doc not existing..." << std::endl;
 	} catch ( couchdb_response_exception& e ) {
 	  // eat up this exceptio nand just try again
 	  continue;
@@ -270,8 +273,11 @@ namespace couchdb {
   void 
   Couchdb::throw_exception_from_response( const ptree& response ) const
   {
-    if( response.get<std::string>( "error" ) == "conflict" ) {
+    if( response.get<std::string>( "error", "" ) == "conflict" ) {
       BOOST_THROW_EXCEPTION( couchdb_conflict_exception()
+			     << couchdb_response_error_info( response ) );
+    } else if( response.get<std::string>( "error", "" ) == "not_found" ) {
+      BOOST_THROW_EXCEPTION( couchdb_document_does_not_exist_exception()
 			     << couchdb_response_error_info( response ) );
     } else {
       BOOST_THROW_EXCEPTION( couchdb_response_exception()
