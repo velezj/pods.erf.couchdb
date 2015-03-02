@@ -28,12 +28,14 @@ pods_install_headers(
 )
 pods_use_pkg_config_packages(erf-couchdb 
   boost-1.54.0
+  boost-1.54.0-system
+  boost-1.54.0-chrono
   libcurl)
 pods_install_libraries( erf-couchdb )
 pods_install_pkg_config_file(erf-couchdb
     CFLAGS
     LIBS -lerf-couchdb -lpthread
-    REQUIRES boost-1.54.0 libcurl
+    REQUIRES boost-1.54.0 boost-1.54.0-chrono boost-1.54.0-system libcurl
     VERSION 1.0.0)
 
 
