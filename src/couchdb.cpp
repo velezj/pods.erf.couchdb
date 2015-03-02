@@ -1,14 +1,11 @@
 
 #include "couchdb.hpp"
 #include "utils.hpp"
-#include <boost/network/uri.hpp>
-#include <boost/network/uri/uri_io.hpp>
-#include <boost/network/protocol/http.hpp>
-#include <boost/network/protocol/http/client.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <curl/curl.h>
 
 #include <iostream>
 #include <sstream>
@@ -16,143 +13,192 @@
 
 
 namespace couchdb {
+  
+  using namespace boost::property_tree;
+  using namespace boost;
+  
+  
+  //========================================================================
 
-    using namespace boost::network;
-    using namespace boost::property_tree;
-    using namespace boost;
+  // Global curl state
+  bool _curl_init = false;
+  
+  //========================================================================
+  
+  Couchdb::Couchdb( const std::string& database_uri )
+    : _couchdb_database_uri( database_uri )
+  {
+    if( !_curl_init ) {
+      curl_global_init(CURL_GLOBAL_ALL);
+    }
+  }
+  
+  //========================================================================
 
+  static size_t
+  AppendToStream( void* contents, size_t size, size_t nmemb, void* userp )
+  {
+    size_t realsize = size * nmemb;
+    std::stringstream *ss = (std::stringstream*)userp;
+    ss->write( (char*)contents, realsize );
+    return realsize;
+  }
+
+  static size_t
+  ReadFromStream( char* buffer, size_t size, size_t nitems, void* userp )
+  {
+    size_t realsize = size * nitems;
+    std::istringstream* iss = (std::istringstream*)userp;
+    return iss->readsome( buffer, realsize );
+  }
 
   //========================================================================
   
-  // Description:
-  // The client to use (sync simple http requests
-  typedef http::basic_client<http::tags::http_default_8bit_tcp_resolve, 1, 1> client;
+  ptree Couchdb::save( const ptree& doc,
+		       const optional<std::string>& id ) const
+  {
 
+    CURL *curl_handle = curl_easy_init();
+    
+    // generate an id if none given
+    std::string the_id;
+    if( id ) {
+      the_id = id.get();
+    } else {
+      uuids::uuid u = uuids::random_generator()();
+      the_id = to_string(u);
+    }
+    
+    // debug
+    //std::cout << "Couchdb::save using id: " << the_id << std::endl;
+    
+    // convert ptree to json
+    std::ostringstream oss;
+    json_parser::write_json( oss, doc );
+    std::string json_doc = oss.str();
+    std::istringstream json_stream( json_doc );
+    
+    // debug
+    //std::cout << "Couchdb::save json_doc=" << json_doc << std::endl;
+    
+    // ok, now setup curl to POST the document to the uri
+    std::string post_uri = this->_couchdb_database_uri;
+    post_uri.append( the_id );
+    std::stringstream response_stream;
+    curl_easy_setopt( curl_handle, CURLOPT_URL, post_uri.c_str() );
+    curl_easy_setopt( curl_handle, CURLOPT_UPLOAD, 1 );
+    curl_easy_setopt( curl_handle, CURLOPT_WRITEFUNCTION, AppendToStream );
+    curl_easy_setopt( curl_handle, CURLOPT_WRITEDATA, &response_stream );
+    curl_easy_setopt( curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0" );
+    curl_easy_setopt( curl_handle, CURLOPT_REFERER, "pip" );
+    curl_easy_setopt( curl_handle, CURLOPT_READFUNCTION, ReadFromStream );
+    curl_easy_setopt( curl_handle, CURLOPT_READDATA, &json_stream );
 
-    //========================================================================
+    // perform the POST, the response will be in response_stream if no error
+    CURLcode res = curl_easy_perform(curl_handle);
+    if( res != CURLE_OK ) {
+      BOOST_THROW_EXCEPTION( couchdb_exception()
+			     << couchdb_request_uri_error_info( post_uri )
+			     << couchdb_network_message_error_info( curl_easy_strerror( res ) ) );
+    }
+    curl_easy_cleanup(curl_handle);
+    
+    
+    // try {
+    //   response = c.put(request, json_doc, std::string("application/json"));
+    // } catch (boost::exception& e ) {
+    //   e << couchdb_request_uri_error_info( post_uri );
+    //   throw;
+    // }
 
-    Couchdb::Couchdb( const uri::uri& database_uri )
-      : _couchdb_database_uri( database_uri )
-    {}
-
-    //========================================================================
-
-    ptree Couchdb::save( const ptree& doc,
-			 const optional<std::string>& id ) const
-    {
-
-      // create an http client to eventually POST to the couchdb uri
-      client c;
-
-      // generate an id if none given
-      std::string the_id;
-      if( id ) {
-	the_id = id.get();
-      } else {
-	uuids::uuid u = uuids::random_generator()();
-	the_id = to_string(u);
-      }
-
-      // debug
-      //std::cout << "Couchdb::save using id: " << the_id << std::endl;
-
-      // convert ptree to json
-      std::ostringstream oss;
-      json_parser::write_json( oss, doc );
-      std::string json_doc = oss.str();
-
-      // debug
-      //std::cout << "Couchdb::save json_doc=" << json_doc << std::endl;
-      
-      // ok, now POST to the couchdb url the document
-      uri::uri post_uri = this->_couchdb_database_uri;
-      post_uri.append( the_id );
-      client::request request( post_uri );
-      //request << header( "Referer", "localhost" );
-      request << header( "Connection", "close" );
-      
-      client::response response;
+    
+    // debug
+    //std::cout << "Couchdb::save response=" << body(response) << std::endl;
+    
+    // now, turn the response body into a ptree since it is json
+    ptree response_ptree;
+    std::string raw_response = response_stream.str();
+    try {
+      json_parser::read_json( response_stream, response_ptree );
+    } catch (boost::exception& e ) {
+      e << couchdb_request_uri_error_info( post_uri )
+	<< couchdb_raw_response_error_info( raw_response );
+      throw;
+    }
+    
+    // Ok, check if the response is an error response, and if
+    // it is throw an exception
+    if( this->is_response_exception( response_ptree ) ) {
       try {
-	response = c.put(request, json_doc, std::string("application/json"));
-      } catch (boost::exception& e ) {
-	e << couchdb_request_uri_error_info( post_uri );
+	this->throw_exception_from_response( response_ptree );
+      } catch ( boost::exception& e ) {
+	e
+	  << couchdb_request_uri_error_info( post_uri )
+	  << couchdb_raw_response_error_info( raw_response );
 	throw;
       }
-      
-      // debug
-      //std::cout << "Couchdb::save response=" << body(response) << std::endl;
-      
-      // now, turn the response body into a ptree since it is json
-      ptree response_ptree;
+    }
+    
+    return response_ptree;
+  }
+  
+  //========================================================================
+  
+  ptree Couchdb::fetch( const std::string& doc_id ) const
+  {
+
+    // get CURL handle
+    CURL* curl_handle = curl_easy_init();
+    
+    // ok, now GET to the couchdb url the document
+    std::string get_uri = this->_couchdb_database_uri;
+    get_uri.append( "/" + doc_id );
+    std::stringstream response_stream;
+    curl_easy_setopt( curl_handle, CURLOPT_URL, get_uri.c_str() );
+    curl_easy_setopt( curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0" );    
+    curl_easy_setopt( curl_handle, CURLOPT_REFERER, "pip" );
+    curl_easy_setopt( curl_handle, CURLOPT_WRITEFUNCTION, AppendToStream );
+    curl_easy_setopt( curl_handle, CURLOPT_WRITEDATA, &response_stream );
+
+    CURLcode res = curl_easy_perform(curl_handle);
+    if( res != CURLE_OK ) {
+      BOOST_THROW_EXCEPTION( couchdb_exception()
+			     << couchdb_request_uri_error_info( get_uri )
+			     << couchdb_network_message_error_info( curl_easy_strerror( res ) ) );
+    }
+    curl_easy_cleanup(curl_handle);
+    
+    
+    // parse the response as json into a ptree
+    ptree response_ptree;
+    std::string raw_response = response_stream.str();
+    json_parser::read_json( response_stream, response_ptree );
+    
+    // throw exception if reponse is an error
+    if( this->is_response_exception( response_ptree ) ) {
       try {
-	std::istringstream iss( body(response) );
-	json_parser::read_json( iss, response_ptree );
-      } catch (boost::exception& e ) {
-	e << couchdb_request_uri_error_info( post_uri )
-	  << couchdb_raw_response_error_info( body(response) );
+	this->throw_exception_from_response( response_ptree );
+      } catch ( boost::exception& e ) {
+	e
+	  << couchdb_request_uri_error_info( get_uri )
+	  << couchdb_raw_response_error_info( raw_response );
 	throw;
       }
-
-      // Ok, check if the response is an error response, and if
-      // it is throw an exception
-      if( this->is_response_exception( response_ptree ) ) {
-	try {
-	  this->throw_exception_from_response( response_ptree );
-	} catch ( boost::exception& e ) {
-	  e
-	    << couchdb_request_uri_error_info( post_uri )
-	    << couchdb_raw_response_error_info( body(response) );
-	  throw;
-	}
-      }
-      
-      return response_ptree;
     }
-
-    //========================================================================
-
-    ptree Couchdb::fetch( const uri::uri& doc_id ) const
-    {
-
-      // create an http client to eventually POST to the couchdb uri
-      client c;
-      
-      // ok, now GET to the couchdb url the document
-      uri::uri get_uri = this->_couchdb_database_uri;
-      get_uri.append( "/" + doc_id.string() );
-      client::request request( get_uri );
-      client::response response = c.get(request);
-      
-      // parse the response as json into a ptree
-      ptree response_ptree;
-      std::istringstream iss( body(response) );
-      json_parser::read_json( iss, response_ptree );
-
-      // throw exception if reponse is an error
-      if( this->is_response_exception( response_ptree ) ) {
-	try {
-	  this->throw_exception_from_response( response_ptree );
-	} catch ( boost::exception& e ) {
-	  e
-	    << couchdb_request_uri_error_info( get_uri )
-	    << couchdb_raw_response_error_info( body(response) );
-	  throw;
-	}
-      }
-
-      return response_ptree;
-    }
-
-    //========================================================================
-
+    
+    return response_ptree;
+  }
+  
+  //========================================================================
+  
   ptree 
-  Couchdb::try_update( const uri::uri& doc_id,
+  Couchdb::try_update( const std::string& doc_id,
 		       const std::vector<std::pair<std::string,std::string> >& puts,
 		       const size_t num_retries ) const
   {
     
     for( size_t i = 0; i < num_retries; ++i ) {
-
+      
       try {
       
 	// fetch the document from couchdb
@@ -173,7 +219,7 @@ namespace couchdb {
 	// try to save the document
 	ptree response;
 	try {
-	  response = this->save( doc, doc_id.string() );
+	  response = this->save( doc, doc_id );
 	} catch ( couchdb_response_exception& e ) {
 	  // ignore this exception and just try again
 	  continue;
@@ -205,7 +251,7 @@ namespace couchdb {
     //========================================================================
   
   ptree
-  Couchdb::try_ensure_substructure( const uri::uri& doc_id,
+  Couchdb::try_ensure_substructure( const std::string& doc_id,
 				    const ptree& structure,
 				    const size_t num_retries) const
   {
@@ -232,7 +278,7 @@ namespace couchdb {
 	// try to save the document
 	ptree response;
 	try {
-	  response = this->save( doc, doc_id.string() );
+	  response = this->save( doc, doc_id );
 	} catch ( couchdb_response_exception& e ) {
 	  // ignore this exception and just try again
 	  continue;

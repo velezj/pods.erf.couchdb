@@ -4,6 +4,8 @@
 
 
 #include "erf-couchdb/exceptions.hpp"
+#include <string>
+#include <vector>
 
   namespace couchdb {
 
@@ -19,7 +21,7 @@
 
       // Description:
       // Creates a new connection to a couchdb instance
-      Couchdb( const boost::network::uri::uri & database_url );
+      Couchdb( const std::string & database_url );
 	       
       // Description:
       // Saves a document to the couch db
@@ -46,7 +48,7 @@
       //
       // Will throw an exception of network/communication issues
       // or if the document is not found.
-      boost::property_tree::ptree fetch( const boost::network::uri::uri& doc_id ) const;
+      boost::property_tree::ptree fetch( const std::string& doc_id ) const;
 
 
       // Description:
@@ -57,7 +59,7 @@
       //
       // Returns the response from the successfull update
       boost::property_tree::ptree 
-      try_update( const boost::network::uri::uri& doc_id,
+      try_update( const std::string& doc_id,
 		  const std::vector<std::pair<std::string,std::string> >& puts,
 		  const size_t num_retries = 10 ) const;
       
@@ -72,7 +74,7 @@
       //
       // Returns the response from hte successful update
       boost::property_tree::ptree
-      try_ensure_substructure( const boost::network::uri::uri& doc_id,
+      try_ensure_substructure( const std::string& doc_id,
 			       const boost::property_tree::ptree& structure,
 			       const size_t num_retries = 10 ) const;
       
@@ -80,7 +82,7 @@
 
       // Description:
       // The URI pointintg to the couchdb databse
-      boost::network::uri::uri _couchdb_database_uri;
+      std::string _couchdb_database_uri;
 
 
       // Description:

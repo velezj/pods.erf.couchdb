@@ -4,7 +4,6 @@
 #define __ERF_COUCHDB_exceptions_HPP__
 
 
-#include <boost/network/uri.hpp>
 #include <boost/exception/all.hpp>
 #include <boost/property_tree/ptree.hpp>
 
@@ -23,8 +22,12 @@
     
     // Description:
     // The couchdb uri for the rewuest
-    typedef boost::error_info<struct couchdb_request_uri_tag, boost::network::uri::uri> couchdb_request_uri_error_info;
+    typedef boost::error_info<struct couchdb_request_uri_tag, std::string> couchdb_request_uri_error_info;
+
     
+    // Description:
+    // The network error message
+    typedef boost::error_info<struct couchdb_network_message_tag, std::string> couchdb_network_message_error_info;
 
     // Description:
     // The number of retries tried

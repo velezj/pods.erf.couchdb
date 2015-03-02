@@ -2,10 +2,8 @@
 #include <erf-couchdb/couchdb.hpp>
 #include <iostream>
 #include <boost/property_tree/json_parser.hpp>
-#include <boost/network/uri/uri_io.hpp>
 
 using namespace boost;
-using namespace boost::network;
 using namespace boost::property_tree;
 using namespace couchdb;
 
@@ -15,7 +13,7 @@ int main( int argn, char** argv )
   try {
     
     // create a new couchdb instance
-    Couchdb couch( uri::uri("http://localhost:5984/test_cpp_api/") );
+    Couchdb couch( "http://localhost:5984/test_cpp_api/" );
     
     // store a document and then retrieve it
     ptree doc;
@@ -28,7 +26,7 @@ int main( int argn, char** argv )
     
     // retrieve the document
     ptree fetched_doc;
-    fetched_doc = couch.fetch( uri::uri("test_doc_0001") );
+    fetched_doc = couch.fetch( "test_doc_0001" );
     std::cout << "FETCH doc: " << std::endl;
     json_parser::write_json( std::cout, fetched_doc );
     std::cout << std::endl;
@@ -41,7 +39,7 @@ int main( int argn, char** argv )
     std::cout << std::endl;
     
     // retrieve the document
-    fetched_doc = couch.fetch( uri::uri(save_response.get<std::string>("id")) );
+    fetched_doc = couch.fetch( save_response.get<std::string>("id") );
     std::cout << "FETCH doc: " << std::endl;
     json_parser::write_json( std::cout, fetched_doc );
     std::cout << std::endl;
@@ -51,7 +49,7 @@ int main( int argn, char** argv )
     std::vector< std::pair<std::string,std::string> > updates;
     updates.push_back( std::pair<std::string,std::string>( "x.z", "bwahahaha!" ) );
     ptree update_response;
-    update_response = couch.try_update( uri::uri("test_doc_0001"), updates );
+    update_response = couch.try_update( "test_doc_0001", updates );
     std::cout << "UPDATE response: " << std::endl;
     json_parser::write_json( std::cout, update_response );
     std::cout << std::endl;
@@ -60,7 +58,7 @@ int main( int argn, char** argv )
     ptree structure;
     structure.put( "5.4.3.2.1", ":-)" );
     structure.put( "5.a.3.2.1", ":)" );
-    update_response = couch.try_ensure_substructure( uri::uri("test_doc_0001"),
+    update_response = couch.try_ensure_substructure( "test_doc_0001",
 						     structure );
     std::cout << "ENSURE response: " << std::endl;
     json_parser::write_json( std::cout, update_response );
@@ -68,7 +66,7 @@ int main( int argn, char** argv )
     
     
     // ensure hte substrcuture of a non-existant document
-    update_response = couch.try_ensure_substructure( uri::uri("test_doc_0002"),
+    update_response = couch.try_ensure_substructure( "test_doc_0002",
 						     structure );
     std::cout << "ENSURE response: " << std::endl;
     json_parser::write_json( std::cout, update_response );
