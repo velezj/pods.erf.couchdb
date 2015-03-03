@@ -84,6 +84,14 @@
       // The URI pointintg to the couchdb databse
       std::string _couchdb_database_uri;
 
+      // Description:
+      // boolean specifying whether we have ensured teh db exists yet or
+      // not
+      mutable bool _ensured_db;
+
+      // Descripiton:
+      // Ensure the databse exists
+      void ensure_db_exists( const std::string& db_url ) const;
 
       // Description:
       // Builds up an exception from a couchdb response and throws it

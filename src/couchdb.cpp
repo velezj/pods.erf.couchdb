@@ -26,7 +26,7 @@ namespace couchdb {
   //========================================================================
   
   Couchdb::Couchdb( const std::string& database_uri )
-    : _couchdb_database_uri( database_uri )
+    : _couchdb_database_uri( database_uri ), _ensured_db(false)
   {
     if( !_curl_init ) {
       curl_global_init(CURL_GLOBAL_ALL);
@@ -57,6 +57,10 @@ namespace couchdb {
   ptree Couchdb::save( const ptree& doc,
 		       const optional<std::string>& id ) const
   {
+    if( !_ensured_db ) {
+      ensure_db_exists( _couchdb_database_uri );
+      _ensured_db = true;
+    }
 
     CURL *curl_handle = curl_easy_init();
     
@@ -97,6 +101,7 @@ namespace couchdb {
     // perform the POST, the response will be in response_stream if no error
     CURLcode res = curl_easy_perform(curl_handle);
     if( res != CURLE_OK ) {
+      curl_easy_cleanup(curl_handle);
       BOOST_THROW_EXCEPTION( couchdb_exception()
 			     << couchdb_request_uri_error_info( post_uri )
 			     << couchdb_network_message_error_info( curl_easy_strerror( res ) ) );
@@ -146,7 +151,11 @@ namespace couchdb {
   
   ptree Couchdb::fetch( const std::string& doc_id ) const
   {
-
+    if( !_ensured_db ) {
+      ensure_db_exists( _couchdb_database_uri );
+      _ensured_db = true;
+    }
+    
     // get CURL handle
     CURL* curl_handle = curl_easy_init();
     
@@ -162,6 +171,7 @@ namespace couchdb {
 
     CURLcode res = curl_easy_perform(curl_handle);
     if( res != CURLE_OK ) {
+      curl_easy_cleanup(curl_handle);
       BOOST_THROW_EXCEPTION( couchdb_exception()
 			     << couchdb_request_uri_error_info( get_uri )
 			     << couchdb_network_message_error_info( curl_easy_strerror( res ) ) );
@@ -333,6 +343,93 @@ namespace couchdb {
   }
 
     //========================================================================
+
+  void Couchdb::ensure_db_exists( const std::string& db_url ) const
+  {
+    // first perform a HED request on the url to see if it is there
+    // then perform a PUT if not there to create the db
+
+    // get CURL handle
+    CURL* curl_handle = curl_easy_init();
+    
+    // ok, now request a HEAD (GET with no body)
+    // to the couchdb url the document
+    curl_easy_setopt( curl_handle, CURLOPT_URL, db_url.c_str() );
+    curl_easy_setopt( curl_handle, CURLOPT_HTTPGET, 1 );
+    curl_easy_setopt( curl_handle, CURLOPT_NOBODY, 1 );
+    curl_easy_setopt( curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0" );    
+
+    CURLcode res = curl_easy_perform(curl_handle);
+    if( res != CURLE_OK ) {
+      curl_easy_cleanup(curl_handle);
+      BOOST_THROW_EXCEPTION( couchdb_exception()
+			     << couchdb_request_uri_error_info( db_url )
+			     << couchdb_network_message_error_info( curl_easy_strerror( res ) ) );
+    }
+
+    // check if HEAD returned a 404 (doc not found)
+    long http_code = -1;
+    res = curl_easy_getinfo( curl_handle, CURLINFO_RESPONSE_CODE, &http_code );
+    if( res != CURLE_OK ) {
+      curl_easy_cleanup(curl_handle);
+      BOOST_THROW_EXCEPTION( couchdb_exception()
+			     << couchdb_request_uri_error_info( db_url )
+			     << couchdb_network_message_error_info( curl_easy_strerror( res ) ) );
+    }
+
+    // ok, if it was a 404, request a PUT with the db to create it
+    if( http_code == 404 ) {
+
+      // ok, now setup curl to POST the document to the uri
+      std::stringstream response_stream;
+      std::istringstream json_stream("");
+      curl_easy_setopt( curl_handle, CURLOPT_URL, db_url.c_str() );
+      curl_easy_setopt( curl_handle, CURLOPT_UPLOAD, 1 );
+      curl_easy_setopt( curl_handle, CURLOPT_WRITEFUNCTION, AppendToStream );
+      curl_easy_setopt( curl_handle, CURLOPT_WRITEDATA, &response_stream );
+      curl_easy_setopt( curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0" );
+      curl_easy_setopt( curl_handle, CURLOPT_READFUNCTION, ReadFromStream );
+      curl_easy_setopt( curl_handle, CURLOPT_READDATA, &json_stream );
+      
+      // perform the POST, the response will be in response_stream if no error
+      res = curl_easy_perform(curl_handle);
+      if( res != CURLE_OK ) {
+	curl_easy_cleanup(curl_handle);
+	BOOST_THROW_EXCEPTION( couchdb_exception()
+			       << couchdb_request_uri_error_info( db_url )
+			       << couchdb_network_message_error_info( curl_easy_strerror( res ) ) );
+      }
+      
+      // now, turn the response body into a ptree since it is json
+      ptree response_ptree;
+      std::string raw_response = response_stream.str();
+      try {
+	json_parser::read_json( response_stream, response_ptree );
+      } catch (boost::exception& e ) {
+	curl_easy_cleanup(curl_handle);
+	e << couchdb_request_uri_error_info( db_url )
+	  << couchdb_raw_response_error_info( raw_response );
+	throw;
+      }
+      
+      // Ok, check if the response is an error response, and if
+      // it is throw an exception
+      if( this->is_response_exception( response_ptree ) ) {
+	try {
+	  this->throw_exception_from_response( response_ptree );
+	} catch ( boost::exception& e ) {
+	  curl_easy_cleanup(curl_handle);
+	  e
+	    << couchdb_request_uri_error_info( db_url )
+	    << couchdb_raw_response_error_info( raw_response );
+	  throw;
+	}
+      } 
+    }
+    
+    curl_easy_cleanup(curl_handle);
+  }
+  
     //========================================================================
     //========================================================================
     //========================================================================
