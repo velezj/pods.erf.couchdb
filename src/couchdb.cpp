@@ -5,6 +5,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <boost/property_tree/json_parser.hpp>
+#include <boost/property_tree/xml_parser.hpp>
 #include <curl/curl.h>
 
 #include <iostream>
@@ -75,6 +76,10 @@ namespace couchdb {
     
     // debug
     //std::cout << "Couchdb::save using id: " << the_id << std::endl;
+    #ifndef NDEBUG
+    std::cout << "about to save: ";
+    xml_parser::write_xml( std::cout, doc );
+    #endif
     
     // convert ptree to json
     std::ostringstream oss;
